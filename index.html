@@ -1,165 +1,61 @@
-﻿<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ТАКТИК-РАДИО</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0d110e">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.5/mqtt.min.js"></script>
-  <style>
-    :root { --bg:#0d110e; --panel:#161d18; --border:#2c3a30; --green:#4af626; --amber:#ffb000; --red:#ff3b30; --text:#c8d6cb; --muted:#627567; }
-    * { box-sizing:border-box; user-select:none; -webkit-user-select:none; font-family:'Courier New',monospace; }
-    body { margin:0; pagding:0; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
-    .header { background:#111612; border-bottom:2px solid var(--border); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; }
-    .title { font-weight:bold; letter-spacing:2px; color:var(--green); font-size:16px; }
-    .status-dot { width:10px; height:10px; border-radius:50%; background:var(--red); display:inline-block; margin-right:6px; }
-    .status-dot.online { background:var(--green); box-shadow:0 0 8px var(--green); }
-    #login-screen { flex:1; display:flex; flex-direction:column; justify-content:center; padding:24px; gap:16px; }
-    label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
-    input { width:100%; background:var(--panel); border:1px solid var(--border); color:var(--green); padding:14px; font-size:18px; font-weight:bold; border-radius:4px; outline:none; text-transform:uppercase; }
-    .btn-primary { background:#1f3323; border:2px solid var(--green); color:var(--green); padding:16px; font-size:16px; font-weight:bold; letter-spacing:2px; border-radius:4px; cursor:pointer; margin-top:8px; }
-    .btn-primary:active { background:var(--green); color:#000; }
-
-    #radio-screen { display:none; flex:1; display:none; flex-direction:column; justify-content:space-between; padding:16px; }
-    .lcd-display { background:#182219; border:2px solid #2e4031; border-radius:6px; padding:14px; box-shadow:inset 0 0 20px rgba(0,0,0,0.8); }
-    .lcd-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-    .freq-code { font-size:22px; font-weight:bold; color:var(--green); letter-spacing:2px; }
-    .mode-badge { padding:4px 10px; border-radius:3px; font-weight:bold; font-size:14px; background:#0d110e; border:1px solid var(--border); color:var(--muted); }
-    .mode-badge.tx { background:var(--red); color:#000; border-color:var(--red); box-shadow:0 0 12px var(--red); }
-    .mode-badge.rx { background:var(--amber); color:#000; border-color:var(--amber); box-shadow:0 0 12px var(--amber); }
-    .speaker-info { font-size:14px; color:var(--amber); min-height:20px; margin-top:6px; font-weight:bold; }
-    .log-box { background:#090c0a; border:1px solid var(--border); border-radius:4px; height:130px; overflow-y:auto; padding:8px; font-size:12px; color:var(--muted); }
-    .log-box div { margin-bottom:4px; }
-    .log-box .sys { color:var(--green); }
-    .log-box .warn { color:var(--amber); }
-    .log-box .err { color:var(--red); }
-    .ptt-zone { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:12px 0; }
-    #ptt-btn { width:210px; height:210px; border-radius:50%; background:radial-gradient(circle at 30% 30%,#2i332c,#121713); border:6px solid #38473c; color:var(--text); font-size:20px; font-weight:bold; letter-spacing:2px; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:0 10px 25px rgba(0,0,0,0.8); touch-action:none; cursor:pointer; }
-    #ptt-btn.active { border-color:var(--red); color:var(--red); background:radial-gradient(circle at 50% 50%,#3a1515,#170808); box-shadow:0 0 35px rgba(255,59,48,0.5); transform:scale(0.97); }
-    #ptt-btn.busy { border-color:var(--amber); color:var(--amber); opacity:0.7; }
-    .ptt-sub { font-size:11px; color:var(--muted); margin-top:8px; }
-    .btn-disconnect { width:100%; background:#261414; border:1px solid #5c2828; color:#ff6b6b; padding:12px; font-size:13px; font-weight:bold; border-radius:4px; cursor:pointer; margin-top:12px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="title">Р-187 // ТАКТИК v1.2</div>
-    <div><span id="conn-dot" class="status-dot"></span><span id="conn-text" style="font-size:12px;">ОТКЛ</span></div>
-  </div>
-  <div id="login-screen">
-    <div><label>Ваш позывной</label><input type="text" id="callsign-input" placeholder="НАПР: АЛМАЗ-1" maxlength="16"></div>
-    <div><label>Ключ-частота (Название группы/)</label><input type="text" id="channel-input" placeholder="НАПР: СЕКТОР-7" maxlength="24"></div>
-    <button class="btn-primary" id="connect-btn">ВЫЙТИ НА СВЯЗЬ</button>
-  </div>
-  <div id="radio-screen">
-    <div class="lcd-display">
-      <div class="lcd-row"><div class="freq-code" id="display-channel">---</div><div class="mode-badge" id="mode-badge">ОЖИДАНИЕ</div></div>
-      <div style="font-size:12px;color:var(--muted);">ПОЗЫВНОЙ: <span id="display-callsign" style="color:var(--text)">---</span></div>
-      <div class="speaker-info" id="speaker-status">ЭФИР ЧИСТ</div>
-    </div>
-    <div class="ptt-zone"><button id="ptt-btn"><span>ПЕРЕДАЧА</span><span class="ptt-sub">УДЕРЖИВАТЬ (PTT)</span></button></div>
-    <div class="log-box" id="log-box"></div>
-    <button class="btn-disconnect" id="disconnect-btn">ОТКЛЮЧИТЬ РАЦИЮ (ВЫКЛ)</button>
-  </div>
-  <audio id="bg-keepalive" loop playsinline></audio>
+﻿<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ТАКТИК-РАДИО</title><link rel="manifest" href="manifest.json">
+<script src="https://cloudflare.com"></script>
+<style>
+:root{--bg:#0d110e;--panel:#161d18;--border:#2c3a30;--green:#4af626;--amber:#ffb000;--red:#ff3b30;--text:#c8d6cb;--muted:#627567}
+*{box-sizing:border-box;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:monospace}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+.header{background:#111612;border-bottom:2px solid var(--border);padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+.title{font-weight:bold;letter-spacing:2px;color:var(--green);font-size:16px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block;margin-right:6px}
+.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+#login{flex:1;display:flex;flex-direction:column;justify-content:center;padding:24px;gap:14px}
+label{font-size:12px;color:var(--muted);text-transform:uppercase}
+input{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--green);padding:14px;font-size:18px;font-weight:bold;border-radius:4px;outline:none;text-transform:uppercase}
+.btn{background:#1f3323;border:2px solid var(--green);color:var(--green);padding:16px;font-size:16px;font-weight:bold;letter-spacing:2px;border-radius:4px;cursor:pointer}
+#radio{display:none;flex:1;flex-direction:column;justify-content:space-between;padding:16px}
+.lcd{background:#182219;border:2px solid #2e4031;border-radius:6px;padding:14px}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.freq{font-size:22px;font-weight:bold;color:var(--green)}
+.badge{padding:4px 10px;border-radius:3px;font-weight:bold;font-size:14px;background:#0d110e;border:1px solid var(--border);color:var(--muted)}
+.badge.tx{background:var(--red);color:#000;border-color:var(--red)}
+.badge.rx{background:var(--amber);color:#000;border-color:var(--amber)}
+.spk{font-size:14px;color:var(--amber);min-height:20px;margin-top:6px;font-weight:bold}
+.log{background:#090c0a;border:1px solid var(--border);border-radius:4px;height:120px;overflow-y:auto;padding:8px;font-size:12px;color:var(--muted)}
+.sys{color:var(--green)}.warn{color:var(--amber)}.err{color:var(--red)}
+.zone{flex:1;display:flex;justify-content:center;align-items:center}
+#ptt{width:220px;height:220px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#2a332c,#121713);border:6px solid #38473c;color:var(--text);font-size:20px;font-weight:bold;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none}
+#ptt.act{border-color:var(--red);color:var(--red);background:#2b0e0e;transform:scale(0.96)}
+#ptt.bsy{border-color:var(--amber);color:var(--amber);opacity:0.6}
+.off{width:100%;background:#261414;border:1px solid #5c2828;color:#ff6b6b;padding:12px;font-weight:bold;border-radius:4px}
+</style></head><body oncontextmenu="return false">
+<div class="header"><div class="title">Р-187 // ТАКТИК v1.3</div><div><span id="dot" class="dot"></span><span id="ctxt" style="font-size:12px">ОТКЛ</span></div></div>
+<div id="login"><div><label>Ваш позывной</label><input id="cs" placeholder="АЛМАЗ-1" maxlength="16"></div>
+<div><label>Ключ-частота (Группа)</label><input id="ch" placeholder="СЕКТОР-7" maxlength="24"></div>
+<button class="btn" id="go">ВЫЙТИ НА СВЯЗЬ</button></div>
+<div id="radio"><div class="lcd"><div class="row"><div class="freq" id="dch">---</div><div class="badge" id="bdg">ОЖИДАНИЕ</div></div>
+<div style="font-size:12px;color:var(--muted)">ПОЗЫВНОЙ: <span id="dcs" style="color:var(--text)">---</span></div>
+<div class="spk" id="spk">ЭФИР ЧИСТ</div></div>
+<div class="zone"><button id="ptt"><span>ПЕРЕДАЧА</span><span style="font-size:11px;color:var(--muted);margin-top:8px">УДЕРЖИВАТЬ</span></button></div>
+<div class="log" id="log"></div><button class="off" id="off">ОТКЛЮЧИТЬ РАЦИЮ</button></div>
+<audio id="bg" loop playsinline></audio>
 <script>
-let client=null,audioCtx=null,micStream=null,mediaRecorder=null;
-let isTX=false,speaker=null,rxTimer=null,myCall="",topic="",wl=null;
-let q=[],playing=false,bIdx=0;
-const NODES=[
-  {n:"HiveMQ",u:"wss://://hivemq.com"},
-  {n:"Mosquitto",u:"wss://test.mosquitto.org:8081/mqtt"},
-  {n:"EMQX",u:"wss://broker.emqx.io:8084/mqtt"}
-];
-const $=id=>document.getElementById(id);
-$("callsign-input").value=localStorage.getItem("r_cs")||"";
-$("channel-input").value=localStorage.getItem("r_ch")||"";
-function log(m,c=""){
-  const b=$("log-box"),d=document.createElement("div");
-  if(c)d.className=c;
-  d.textContent="["+new Date().toLocaleTimeString()+"] "+m;
-  b.appendChild(d);b.scrollTop=b.scrollHeight;
-}
-function beep(t){
-  if(!audioCtx)return;
-  const n=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();
-  o.connect(g);g.connect(audioCtx.destination);
-  if(t===1){o.type="square";o.frequency.setValueAtTime(180,n);o.frequency.exponentialRampToValueAtTime(90,n+0.05);g.gain.setValueAtTime(0.15,n);g.gain.exponentialRampToValueAtTime(0.01,n+0.05);o.start(n);o.stop(n+0.05);}
-  else{o.type="sine";o.frequency.setValueAtTime(1250,n);o.frequency.setValueAtTime(1600,n+0.06);g.gain.setValueAtTime(0.12,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.14);o.start(n);o.stop(n+0.14);}
-}
-async function getHash(s){
-  const d=new TextEncoder().encode("tr1_"+s.trim().toUpperCase());
-  const h=await crypto.subtle.digest("SHA-256",d);
-  return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,24);
-}
-function keepBg(ch){
-  const sr=8000,buf=new ArrayBuffer(44+sr*2),v=new DataView(buf);
-  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
-  ws(0,"RIFF");v.setUint32(4,36+sr*2,true);ws(8,"WAVE");ws(12,"fmt ");
-  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
-  v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
-  ws(36,"data");v.setUint32(40,sr*2,true);
-  const el=$("bg-keepalive");el.src=URL.createObjectURL(new Blob([buf],{type:"audio/wav"}));
-  el.volume=0.01;el.play().catch(()=>{});
-  if("mediaSession"in navigator){
-    navigator.mediaSession.metadata=new MediaMetadata({title:"CH: "+ch,artist:myCall});
-    navigator.mediaSession.setActionHandler("play",()=>startTX());
-    navigator.mediaSession.setActionHandler("pause",()=>stopTX());
-  }
-}
-function connectNode(ch){
-  if(typeof mqtt==="undefined"){log("Ошибка загрузки MQTT","err");return;}
-  const nd=NODES[bIdx%NODES.length];log("Подключение: "+nd.n+"...","warn");
-  if(client){try{client.end(true);}catch(e){}}
-  client=mqtt.connect(nd.u,{clientId:"r_"+Math.random().toString(16).slice(2,9),keepalive:20,connectTimeout:5000,reconnectPeriod:0});
-  const tm=setTimeout(()=>{if(!client||!client.connected){log(nd.n+" не отвечает, смена...","err");bIdx++;connectNode(ch);}},5500);
-  client.on("connect",()=>{
-    clearTimeout(tm);$("conn-dot").classList.add("online");$("conn-text").textContent="В СЕТИ";
-    client.subscribe(topic+"/a");client.subscribe(topic+"/c");
-    client.publish(topic+"/c",JSON.stringify({t:"j",s:myCall}));
-    log("СВЯЗЬ ЕСТЬ ("+nd.n+")","sys");
-  });
-  client.on("close",()=>{$("conn-dot").classList.remove("online");$("conn-text").textContent="ПОИСК...";});
-  client.on("message",(tp,pl)=>{
-    const d=JSON.parse(pl.toString());if(d.s===myCall)return;
-    if(tp.endsWith("/c")){if(d.t==="j")log(d.s+" в сети");if(d.t==="e"){beep(2);resetRX();}}
-    else if(tp.endsWith("/a"))onAudio(d.s,d.a);
-  });
-}
-$("connect-btn").onclick=async()=>{
-  const cs=$("callsign-input").value.trim().toUpperCase(),ch=$("channel-input").value.trim().toUpperCase();
-  if(!cs||!ch){alert("Введите позывной и группу!");return;}
-  localStorage.setItem("r_cs",cs);localStorage.setItem("r_ch",ch);myCall=cs;
-  try{
-    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
-  }catch(e){alert("Нет доступа к микрофону!");return;}
-  $("login-screen").style.display="none";$("radio-screen").style.display="flex";
-  $("display-channel").textContent=ch;$("display-callsign").textContent=myCall;
-  keepBg(ch);if("wakeLock"in navigator)navigator.wakeLock.request("screen").then(w=>wl=w).catch(()=>{});
-  topic="tr_net/"+await getHash(ch);connectNode(ch);
-};
-function onAudio(s,b64){
-  if(isTX)return;speaker=s;const bg=$("mode-badge");bg.textContent="ПРИЕМ (RX)";bg.className="mode-badge rx";
-  $("speaker-status").textContent="ГОВОРИТ: "+s;$("ptt-btn").classList.add("busy");
-  clearTimeout(rxTimer);rxTimer=setTimeout(resetRX,2000);q.push(b64);if(!playing)playQ();
-}
-function playQ(){if(!q.length){playing=false;return;}playing=true;const a=new Audio("data:audio/webm;codecs=opus;base64,"+q.shift());a.onended=playQ;a.onerror=playQ;a.play().catch(playQ);}
-function resetRX(){speaker=null;if(!isTX){const bg=$("mode-badge");bg.textContent="ОЖИДАНИЕ";bg.className="mode-badge";$("speaker-status").textContent="ЭФИР ЧИСТ";$("ptt-btn").classList.remove("busy");}}
-function startTX(){
-  if(isTX||!client||!client.connected)return;if(speaker){log("Занято: "+speaker,"warn");return;}
-  if(audioCtx.state==="suspended")audioCtx.resume();isTX=true;beep(1);if(navigator.vibrate)navigator.vibrate(40);
-  $("ptt-btn").classList.add("active");const bg=$("mode-badge");bg.textContent="ПЕРЕДАЧА (TX)";bg.className="mode-badge tx";$("speaker-status").textContent="ВЫ В ЭФИРЕ...";
-  const mt=MediaRecorder.isTypeSupported("audio/webm;codecs=opus")?"audio/webm;codecs=opus":"";
-  mediaRecorder=new MediaRecorder(micStream,mt?{mimeType:mt,audioBitsPerSecond:16000}:{});
-  mediaRecorder.ondataavailable=e=>{if(e.data.size>0&&isTX){const r=new FileReader();r.onloadend=()=>{const i=r.result.indexOf(",");if(i!==-1)client.publish(topic+"/a",JSON.stringify({s:myCall,a:r.result.slice(i+1)}));};r.readAsDataURL(e.data);}};
-  mediaRecorder.start(450);
-}
-function stopTX(){
-  if(!isTX)return;isTX=false;if(mediaRecorder&&mediaRecorder.state!=="inactive")mediaRecorder.stop();beep(2);
-  $("ptt-btn").classList.remove("active");resetRX();if(client&&client.connected)client.publish(topic+"/c",JSON.stringify({t:"e",s:myCall}));
-}
-const ptt=$("ptt-btn");ptt.onpointerdown=e=>{e.preventDefault();startTX();};window.onpointerup=()=>{if(isTX)stopTX();};ptt.onpointercancel=()=>{if(isTX)stopTX();};
-$("disconnect-btn").onclick=()=>{if(!confirm("Отключить рацию?"))return;stopTX();if(client)client.end();if(micStream)micStream.getTracks().forEach(t=>t.stop());location.reload();};
+let cli=null,actx=null,stream=null,proc=null,isTX=false,spk=null,rxT=null,myCs="",topB="",bIdx=0,nextPlay=0;
+const NODES=[{n:"HiveMQ",u:"wss://://hivemq.com"},{n:"Mosquitto",u:"wss://test.mosquitto.org:8081/mqtt"},{n:"EMQX",u:"wss://broker.emqx.io:8084/mqtt"}];
+const $=i=>document.getElementById(i);
+$("cs").value=localStorage.getItem("r_cs")||"";$("ch").value=localStorage.getItem("r_ch")||"";
+function log(m,c=""){const b=$("log"),d=document.createElement("div");if(c)d.className=c;d.textContent="["+new Date().toLocaleTimeString()+"] "+m;b.appendChild(d);b.scrollTop=b.scrollHeight;}
+function beep(t){if(!actx)return;const n=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();o.connect(g);g.connect(actx.destination);if(t===1){o.type="square";o.frequency.setValueAtTime(180,n);o.frequency.exponentialRampToValueAtTime(90,n+0.05);g.gain.setValueAtTime(0.15,n);g.gain.exponentialRampToValueAtTime(0.01,n+0.05);o.start(n);o.stop(n+0.05);}else{o.type="sine";o.frequency.setValueAtTime(1250,n);o.frequency.setValueAtTime(1600,n+0.06);g.gain.setValueAtTime(0.12,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.14);o.start(n);o.stop(n+0.14);}}
+async function getHash(s){const d=new TextEncoder().encode("tr1_"+s.trim().toUpperCase()),h=await crypto.subtle.digest("SHA-256",d);return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,24);}
+function keepBg(ch){const sr=8000,buf=new ArrayBuffer(44+sr*2),v=new DataView(buf),ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};ws(0,"RIFF");v.setUint32(4,36+sr*2,true);ws(8,"WAVE");ws(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);ws(36,"data");v.setUint32(40,sr*2,true);const el=$("bg");el.src=URL.createObjectURL(new Blob([buf],{type:"audio/wav"}));el.volume=0.01;el.play().catch(()=>{});if("mediaSession"in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:"CH: "+ch,artist:myCs});navigator.mediaSession.setActionHandler("play",()=>startTX());navigator.mediaSession.setActionHandler("pause",()=>stopTX());}}
+function conn(ch){const nd=NODES[bIdx%NODES.length];log("Узел: "+nd.n+"...","warn");if(cli){try{cli.removeAllListeners();cli.end(true);}catch(e){}}const c=mqtt.connect(nd.u,{clientId:"r_"+Math.random().toString(16).slice(2,9),keepalive:20,connectTimeout:5000,reconnectPeriod:3000});cli=c;const tm=setTimeout(()=>{if(cli===c&&!c.connected){log(nd.n+" молчит, смена...","err");bIdx++;conn(ch);}},5500);c.on("connect",()=>{if(cli!==c)return;clearTimeout(tm);$("dot").classList.add("on");$("ctxt").textContent="В СЕТИ ("+nd.n+")";c.subscribe(topB+"/a");c.subscribe(topB+"/c");c.publish(topB+"/c",JSON.stringify({t:"j",s:myCs}));log("СВЯЗЬ АКТИВНА: "+nd.n,"sys");});c.on("offline",()=>{if(cli===c){$("dot").classList.remove("on");$("ctxt").textContent="ПОИСК...";}});c.on("message",(tp,pl)=>{if(cli!==c)return;const d=JSON.parse(pl.toString());if(d.s===myCs)return;if(tp.endsWith("/c")){if(d.t==="j")log(d.s+" в эфире");if(d.t==="e"){beep(2);resetRX();}}else if(tp.endsWith("/a"))playPCM(d.s,d.a,d.r);});}
+function f32ToB64(f32){const i16=new Int16Array(f32.length);for(let i=0;i<f32.length;i++){let s=Math.max(-1,Math.min(1,f32[i]));i16[i]=s<0?s*0x8000:s*0x7FFF;}const u8=new Uint8Array(i16.buffer);let bin="";for(let i=0;i<u8.length;i++)bin+=String.fromCharCode(u8[i]);return btoa(bin);}
+function playPCM(s,b64,sr){if(isTX||!actx)return;if(actx.state==="suspended")actx.resume();spk=s;const bg=$("bdg");bg.textContent="ПРИЕМ (RX)";bg.className="badge rx";$("spk").textContent="ГОВОРИТ: "+s;$("ptt").classList.add("bsy");clearTimeout(rxT);rxT=setTimeout(resetRX,1500);const bin=atob(b64),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);const i16=new Int16Array(u8.buffer),buf=actx.createBuffer(1,i16.length,sr||16000),ch=buf.getChannelData(0);for(let i=0;i<i16.length;i++)ch[i]=i16[i]/32768;const src=actx.createBufferSource();src.buffer=buf;src.connect(actx.destination);const now=actx.currentTime;if(nextPlay<now)nextPlay=now+0.05;src.start(nextPlay);nextPlay+=buf.duration;}
+function resetRX(){spk=null;nextPlay=0;if(!isTX){const bg=$("bdg");bg.textContent="ОЖИДАНИЕ";bg.className="badge";$("spk").textContent="ЭФИР ЧИСТ";$("ptt").classList.remove("bsy");}}
+$("go").onclick=async()=>{const cs=$("cs").value.trim().toUpperCase(),ch=$("ch").value.trim().toUpperCase();if(!cs||!ch){alert("Введите позывной и группу!");return;}localStorage.setItem("r_cs",cs);localStorage.setItem("r_ch",ch);myCs=cs;try{actx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:16000});stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});const src=actx.createMediaStreamSource(stream);proc=actx.createScriptProcessor(4096,1,1);proc.onaudioprocess=e=>{if(isTX&&cli&&cli.connected){const b64=f32ToB64(e.inputBuffer.getChannelData(0));cli.publish(topB+"/a",JSON.stringify({s:myCs,a:b64,r:actx.sampleRate}));}};src.connect(proc);proc.connect(actx.destination);}catch(e){alert("Ошибка микрофона: "+e.message);return;}$("login").style.display="none";$("radio").style.display="flex";$("dch").textContent=ch;$("dcs").textContent=myCs;keepBg(ch);topB="tr_net/"+await getHash(ch);conn(ch);};
+function startTX(){if(isTX||!cli||!cli.connected)return;if(spk){log("Занято: "+spk,"warn");return;}if(actx.state==="suspended")actx.resume();isTX=true;beep(1);if(navigator.vibrate)navigator.vibrate(40);$("ptt").classList.add("act");const bg=$("bdg");bg.textContent="ПЕРЕДАЧА (TX)";bg.className="badge tx";$("spk").textContent="ВЫ В ЭФИРЕ...";}
+function stopTX(){if(!isTX)return;isTX=false;beep(2);$("ptt").classList.remove("act");resetRX();if(cli&&cli.connected)cli.publish(topB+"/c",JSON.stringify({t:"e",s:myCs}));}
+const ptt=$("ptt");ptt.addEventListener("touchstart",e=>{e.preventDefault();startTX();},{passive:false});ptt.addEventListener("touchend",e=>{e.preventDefault();stopTX();});ptt.addEventListener("mousedown",e=>{if(e.button===0)startTX();});window.addEventListener("mouseup",()=>{if(isTX)stopTX();});
+$("off").onclick=()=>{if(!confirm("Отключить рацию?"))return;stopTX();if(cli)cli.end();if(stream)stream.getTracks().forEach(t=>t.stop());location.reload();};
 </script></body></html>
