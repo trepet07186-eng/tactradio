@@ -1,16 +1,10 @@
-﻿{
-  "name": "ТАКТИК-РАДИО Р-187",
-  "short_name": "РАЦИЯ",
+{
+  "name": "Рация ПВО (PTT)",
+  "short_name": "Рация ПВО",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0d110e",
-  "theme_color": "#0d110e",
-  "icons": [
-    {
-      "src": "https://flaticon.com",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117"
 }

@@ -1,73 +1,63 @@
-<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>ТАКТИК-РАДИО</title><link rel="manifest" href="manifest.json">
-<style>
-:root{--bg:#0d110e;--panel:#161d18;--border:#2c3a30;--green:#4af626;--amber:#ffb000;--red:#ff3b30;--text:#c8d6cb;--muted:#627567}
-*{box-sizing:border-box;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:monospace}
-body{margin:0;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100dvh;overflow:hidden}
-.header{background:#111612;border-bottom:2px solid var(--border);padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
-.title{font-weight:bold;letter-spacing:2px;color:var(--green);font-size:16px}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block;margin-right:6px}
-.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
-#login{flex:1;display:flex;flex-direction:column;justify-content:center;padding:24px;gap:14px}
-label{font-size:12px;color:var(--muted);text-transform:uppercase}
-input{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--green);padding:14px;font-size:18px;font-weight:bold;border-radius:4px;outline:none;text-transform:uppercase}
-.btn{background:#1f3323;border:2px solid var(--green);color:var(--green);padding:16px;font-size:16px;font-weight:bold;letter-spacing:2px;border-radius:4px;cursor:pointer}
-#radio{display:none;flex:1;flex-direction:column;justify-content:space-between;padding:16px}
-.lcd{background:#182219;border:2px solid #2e4031;border-radius:6px;padding:14px}
-.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.freq{font-size:22px;font-weight:bold;color:var(--green)}
-.badge{padding:4px 10px;border-radius:3px;font-weight:bold;font-size:14px;background:#0d110e;border:1px solid var(--border);color:var(--muted)}
-.badge.tx{background:var(--red);color:#000;border-color:var(--red)}
-.badge.rx{background:var(--amber);color:#000;border-color:var(--amber)}
-.spk{font-size:14px;color:var(--amber);min-height:20px;margin-top:6px;font-weight:bold}
-.vu-wrap{width:100%;height:8px;background:#090c0a;border:1px solid var(--border);border-radius:3px;margin-top:8px;overflow:hidden}
-#vu{width:0%;height:100%;background:var(--green);transition:width 0.05s}
-.log{background:#090c0a;border:1px solid var(--border);border-radius:4px;height:120px;overflow-y:auto;padding:8px;font-size:12px;color:var(--muted)}
-.sys{color:var(--green)}.warn{color:var(--amber)}.err{color:var(--red)}
-.zone{flex:1;display:flex;justify-content:center;align-items:center}
-#ptt{width:210px;height:210px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#2a332c,#121713);border:6px solid #38473c;color:var(--text);font-size:20px;font-weight:bold;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none}
-#ptt.act{border-color:var(--red);color:var(--red);background:#2b0e0e;transform:scale(0.96)}
-#ptt.bsy{border-color:var(--amber);color:var(--amber);opacity:0.6}
-.off{width:100%;background:#261414;border:1px solid #5c2828;color:#ff6b6b;padding:12px;font-weight:bold;border-radius:4px}
-</style></head><body oncontextmenu="return false">
-<div class="header"><div class="title">Р-187 // ТАКТИК v2.1</div><div><span id="dot" class="dot"></span><span id="ctxt" style="font-size:12px">ОТКЛ</span></div></div>
-<div id="login"><div><label>Ваш позывной</label><input id="cs" placeholder="АЛМАЗ-1" maxlength="16"></div>
-<div><label>Ключ-частота (Группа)</label><input id="ch" placeholder="СЕКТОР-7" maxlength="24"></div>
-<button class="btn" id="go">ВЫЙТИ НА СВЯЗЬ</button></div>
-<div id="radio"><div class="lcd"><div class="row"><div class="freq" id="dch">---</div><div class="badge" id="bdg">ОЖИДАНИЕ</div></div>
-<div style="font-size:12px;color:var(--muted)">ПОЗЫВНОЙ: <span id="dcs" style="color:var(--text)">---</span></div>
-<div class="spk" id="spk">ЭФИР ЧИСТ</div><div class="vu-wrap"><div id="vu"></div></div></div>
-<div class="zone"><button id="ptt"><span>ПЕРЕДАЧА</span><span style="font-size:11px;color:var(--muted);margin-top:8px">УДЕРЖИВАТЬ</span></button></div>
-<div class="log" id="log"></div><button class="off" id="off">ОТКЛЮЧИТЬ РАЦИЮ</button></div>
-<audio id="bg" loop playsinline></audio>
-<script>
-class MiniMQTT{
-  constructor(url,cid){this.ws=new WebSocket(url,"mqtt");this.ws.binaryType="arraybuffer";this.cb={};this.ok=false;
-    this.ws.onopen=()=>{const u=this.enc(cid),vh=Array.of(0,4,77,81,84,84,4,2,0,40);this.sendRaw(0x10,vh.concat(u));};
-    this.ws.onmessage=e=>{const d=new Uint8Array(e.data);let i=0;while(i<d.length){const t=d.at(i)>>4;i++;let m=1,l=0,b;do{b=d.at(i++);l+=(b&127)*m;m*=128;}while((b&128)!==0);const p=d.slice(i,i+l);i+=l;if(t===2){this.ok=true;this.pi=setInterval(()=>{if(this.ws.readyState===1)this.ws.send(Uint8Array.of(0xC0,0));},15000);if(this.cb.connect)this.cb.connect();}else if(t===3){const tl=(p.at(0)<<8)|p.at(1);const tp=new TextDecoder().decode(p.slice(2,2+tl));const msg=new TextDecoder().decode(p.slice(2+tl));if(this.cb.message)this.cb.message(tp,msg);}}};
-    this.ws.onerror=()=>{if(this.cb.error)this.cb.error();};this.ws.onclose=()=>{this.ok=false;clearInterval(this.pi);if(this.cb.close)this.cb.close();};}
-  enc(s){const b=Array.from(new TextEncoder().encode(s));return Array.of((b.length>>8)&255,b.length&255).concat(b);}
-  sendRaw(hdr,pl){if(this.ws.readyState!==1)return;let x=pl.length,vl=Array.of();do{let e=x%128;x=Math.floor(x/128);if(x>0)e|=128;vl.push(e);}while(x>0);this.ws.send(Uint8Array.from(Array.of(hdr).concat(vl,pl)));}
-  on(e,f){this.cb[e]=f;}
-  subscribe(t){this.sendRaw(0x82,Array.of(0,1).concat(this.enc(t),Array.of(0)));}
-  publish(t,m){this.sendRaw(0x30,this.enc(t).concat(Array.from(new TextEncoder().encode(m))));}
-  end(){clearInterval(this.pi);try{this.ws.close();}catch(e){}}
-}
-let cli=null,actx=null,stream=null,proc=null,isTX=false,spk=null,rxT=null,myCs="",topB="",nextPlay=0,txCnt=0,rxCnt=0,pcmBuf=[];
-const $=i=>document.getElementById(i);
-$("cs").value=localStorage.getItem("r_cs")||"";$("ch").value=localStorage.getItem("r_ch")||"";
-function log(m,c=""){const b=$("log"),d=document.createElement("div");if(c)d.className=c;d.textContent="["+new Date().toLocaleTimeString()+"] "+m;b.appendChild(d);b.scrollTop=b.scrollHeight;}
-function beep(t){if(!actx)return;const n=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();o.connect(g);g.connect(actx.destination);if(t===1){o.type="square";o.frequency.setValueAtTime(180,n);o.frequency.exponentialRampToValueAtTime(90,n+0.05);g.gain.setValueAtTime(0.15,n);g.gain.exponentialRampToValueAtTime(0.01,n+0.05);o.start(n);o.stop(n+0.05);}else{o.type="sine";o.frequency.setValueAtTime(1250,n);o.frequency.setValueAtTime(1600,n+0.06);g.gain.setValueAtTime(0.12,n);g.gain.exponentialRampToValueAtTime(0.001,n+0.14);o.start(n);o.stop(n+0.14);}}
-async function getHash(s){const d=new TextEncoder().encode("tr2_"+s.trim().toUpperCase()),h=await crypto.subtle.digest("SHA-256",d);return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,24);}
-function keepBg(ch){const sr=8000,buf=new ArrayBuffer(44+sr*2),v=new DataView(buf),ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};ws(0,"RIFF");v.setUint32(4,36+sr*2,true);ws(8,"WAVE");ws(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);ws(36,"data");v.setUint32(40,sr*2,true);const el=$("bg");el.src=URL.createObjectURL(new Blob(Array.of(buf),{type:"audio/wav"}));el.volume=0.01;el.play().catch(()=>{});}
-function conn(ch){log("Подключение к EMQX...","warn");if(cli)cli.end();const c=new MiniMQTT("wss://broker.emqx.io:8084/mqtt","rad_"+Math.random().toString(16).slice(2,10));cli=c;c.on("connect",()=>{if(cli!==c)return;$("dot").classList.add("on");$("ctxt").textContent="В СЕТИ (EMQX)";c.subscribe(topB+"/a");c.subscribe(topB+"/c");c.publish(topB+"/c",JSON.stringify({t:"j",s:myCs}));log("В СЕТИ! Частота: "+ch,"sys");});c.on("close",()=>{if(cli===c){$("dot").classList.remove("on");$("ctxt").textContent="ПЕРЕПОДКЛ...";log("Переподключение через 2с...","warn");setTimeout(()=>conn(ch),2000);}});c.on("message",(tp,pl)=>{if(cli!==c)return;const d=JSON.parse(pl);if(d.s===myCs)return;if(tp.endsWith("/c")){if(d.t==="j"){log(d.s+" вошел на частоту","sys");c.publish(topB+"/c",JSON.stringify({t:"p",s:myCs}));}if(d.t==="p")log(d.s+" уже на связи","sys");if(d.t==="e"){log("Принято кадров: "+rxCnt);rxCnt=0;beep(2);resetRX();}}else if(tp.endsWith("/a")){rxCnt++;play8Bit(d.s,d.a);}});}
-function enc8(arr){let pk=0,b="";for(let i=0;i<arr.length;i++){let s=Math.max(-1,Math.min(1,arr.at(i)));if(Math.abs(s)>pk)pk=Math.abs(s);b+=String.fromCharCode(Math.round((s+1)*127.5));}$("vu").style.width=Math.min(100,Math.round(pk*250))+"%";return btoa(b);}
-function play8Bit(s,b64){if(isTX||!actx)return;if(actx.state==="suspended")actx.resume();spk=s;const bg=$("bdg");bg.textContent="ПРИЕМ (RX)";bg.className="badge rx";$("spk").textContent="ГОВОРИТ: "+s;$("ptt").classList.add("bsy");clearTimeout(rxT);rxT=setTimeout(resetRX,1500);const bin=atob(b64),buf=actx.createBuffer(1,bin.length,8000),ch=buf.getChannelData(0);let pk=0;for(let i=0;i<bin.length;i++){let v=(bin.charCodeAt(i)/127.5)-1;if(Math.abs(v)>pk)pk=Math.abs(v);ch.set(Float32Array.of(v),i);}$("vu").style.width=Math.min(100,Math.round(pk*250))+"%";const src=actx.createBufferSource();src.buffer=buf;src.connect(actx.destination);const now=actx.currentTime;if(nextPlay<now)nextPlay=now+0.04;src.start(nextPlay);nextPlay+=buf.duration;}
-function resetRX(){spk=null;nextPlay=0;$("vu").style.width="0%";if(!isTX){const bg=$("bdg");bg.textContent="ОЖИДАНИЕ";bg.className="badge";$("spk").textContent="ЭФИР ЧИСТ";$("ptt").classList.remove("bsy");}}
-$("go").onclick=async()=>{const cs=$("cs").value.trim().toUpperCase(),ch=$("ch").value.trim().toUpperCase();if(!cs||!ch){alert("Введите позывной и группу!");return;}localStorage.setItem("r_cs",cs);localStorage.setItem("r_ch",ch);myCs=cs;try{actx=new(window.AudioContext||window.webkitAudioContext)();stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});const src=actx.createMediaStreamSource(stream);proc=actx.createScriptProcessor(2048,1,1);const mute=actx.createGain();mute.gain.value=0;proc.onaudioprocess=e=>{if(!isTX||!cli||!cli.ok)return;const inp=e.inputBuffer.getChannelData(0),rat=Math.max(1,Math.round(actx.sampleRate/8000));for(let i=0;i<inp.length;i+=rat)pcmBuf.push(inp.at(i));if(pcmBuf.length>=1600){const b64=enc8(pcmBuf);pcmBuf=Array.of();cli.publish(topB+"/a",JSON.stringify({s:myCs,a:b64}));txCnt++;}};src.connect(proc);proc.connect(mute);mute.connect(actx.destination);}catch(e){alert("Ошибка микрофона: "+e.message);return;}$("login").style.display="none";$("radio").style.display="flex";$("dch").textContent=ch;$("dcs").textContent=myCs;keepBg(ch);topB="tr_net/"+await getHash(ch);conn(ch);};
-function startTX(){if(isTX||!cli||!cli.ok)return;if(spk){log("Занято: "+spk,"warn");return;}if(actx.state==="suspended")actx.resume();isTX=true;txCnt=0;pcmBuf=Array.of();beep(1);if(navigator.vibrate)navigator.vibrate(40);$("ptt").classList.add("act");const bg=$("bdg");bg.textContent="ПЕРЕДАЧА (TX)";bg.className="badge tx";$("spk").textContent="ВЫ В ЭФИРЕ...";}
-function stopTX(){if(!isTX)return;isTX=false;beep(2);$("ptt").classList.remove("act");log("Отправлено кадров: "+txCnt);resetRX();if(cli&&cli.ok)cli.publish(topB+"/c",JSON.stringify({t:"e",s:myCs}));}
-const ptt=$("ptt");ptt.addEventListener("touchstart",e=>{e.preventDefault();startTX();},{passive:false});ptt.addEventListener("touchend",e=>{e.preventDefault();stopTX();});ptt.addEventListener("mousedown",e=>{if(e.button===0)startTX();});window.addEventListener("mouseup",()=>{if(isTX)stopTX();});
-$("off").onclick=()=>{if(!confirm("Отключить рацию?"))return;stopTX();if(cli)cli.end();if(stream)stream.getTracks().forEach(t=>t.stop());location.reload();};
-</script></body></html>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Рация ПВО (PTT)</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+    body, html { margin: 0; padding: 0; height: 100dvh; width: 100%; background: #0d1117; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+    .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+    .title { font-weight: 800; font-size: 15px; color: #4ade80; letter-spacing: 0.5px; }
+    .badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px; background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .badge.online { background: #14532d; color: #4ade80; border-color: #22c55e; }
+    .badge.rx { background: #1d4ed8; color: #fff; border-color: #60a5fa; }
+    .badge.tx { background: #7f1d1d; color: #fca5a5; border-color: #ef4444; }
+    .setup-bar { background: #131820; border-bottom: 1px solid #26303d; padding: 8px 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    input { background: #090d12; color: #ffd23f; border: 1px solid #3b4758; border-radius: 7px; padding: 7px 9px; font-size: 13px; font-weight: 700; outline: none; }
+    input::placeholder { color: #64748b; font-weight: 400; }
+    .btn { background: #1e293b; color: #f8fafc; border: 1px solid #475569; border-radius: 7px; padding: 7px 11px; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn.green { background: #15803d; border-color: #22c55e; }
+    .btn.red { background: #7f1d1d; border-color: #ef4444; }
+    .log-area { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+    .msg-item { background: #161d26; border-left: 4px solid #38bdf8; border-radius: 6px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+    .msg-item.mine { border-left-color: #4ade80; background: #11221a; }
+    .msg-item.playing { border-color: #f59e0b; background: #291d0c; box-shadow: 0 0 10px rgba(245,158,11,0.3); }
+    .ptt-zone { background: #12171f; border-top: 1px solid #2d3748; padding: 14px 16px 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .vu-wrap { width: 100%; max-width: 340px; height: 8px; background: #090d12; border-radius: 4px; overflow: hidden; border: 1px solid #26303d; }
+    .vu-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #eab308, #ef4444); transition: width 0.06s; }
+    .ptt-btn { width: 185px; height: 185px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #1e293b, #0f172a); border: 4px solid #38bdf8; color: #f8fafc; font-size: 15px; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 8px 25px rgba(0,0,0,0.6); touch-action: none; cursor: pointer; transition: transform 0.08s, border-color 0.1s; }
+    .ptt-btn:disabled { opacity: 0.4; border-color: #475569; cursor: not-allowed; }
+    .ptt-btn.active { transform: scale(0.95); background: radial-gradient(circle at 35% 35%, #991b1b, #450a0a); border-color: #ef4444; box-shadow: 0 0 30px rgba(239,68,68,0.65); color: #fff; }
+    .ptt-btn.receiving { border-color: #22c55e; box-shadow: 0 0 25px rgba(34,197,94,0.45); }
+    .hint { font-size: 12px; color: #94a3b8; text-align: center; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">📻 РАЦИЯ ПВО [AES-256]</div>
+    <div id="netBadge" class="badge">ОФЛАЙН</div>
+  </div>
+  <div class="setup-bar">
+    <input id="inCall" placeholder="Позывной (МОГ-1)" style="flex:1; min-width:110px;" />
+    <input id="inRoom" placeholder="Канал (333)" value="333" style="width:95px;" />
+    <button id="btnConnect" class="btn green">В эфир</button>
+    <button id="btnClear" class="btn red" title="Очистить эфир и облако">Сброс</button>
+  </div>
+  <div id="logList" class="log-area">
+    <div style="color:#64748b; font-size:12px; text-align:center; margin-top:20px;">Введите позывной и код канала, затем нажмите «В эфир» для активации микрофона и динамика.</div>
+  </div>
+  <div class="ptt-zone">
+    <div class="vu-wrap"><div id="vuBar" class="vu-bar"></div></div>
+    <div id="statusHint" class="hint">Ожидание подключения к каналу...</div>
+    <button id="btnPtt" class="ptt-btn" disabled>
+      <span style="font-size:34px;">🎙</span>
+      <span id="pttMainTxt">ПЕРЕДАЧА</span>
+      <span id="pttSubTxt" style="font-size:11px; color:#94a3b8; font-weight:600;">УДЕРЖИВАТЬ</span>
+    </button>
+  </div>
+  <script>if("serviceWorker" in navigator){navigator.serviceWorker.register("./sw.js");}</script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>
