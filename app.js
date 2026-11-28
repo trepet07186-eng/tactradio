@@ -213,7 +213,7 @@ async function sendVoicePacket(blob, durSec, mimeType) {
   statusHint.textContent = "⏳ Шифрование и отправка (" + durSec + "с)...";
   const b64 = await new Promise((resolve) => {
     const r = new FileReader();
-    r.onload = () => resolve(r.result.split(","));
+    r.onload = () => resolve(r.result.split(",")[1]);
     r.readAsDataURL(blob);
   });
   const now = new Date();
